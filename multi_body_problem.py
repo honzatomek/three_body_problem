@@ -10,6 +10,8 @@ import mpl_toolkits.mplot3d.axes3d as p3
 # from matplotlib import animation
 import matplotlib.animation as animation
 
+# <-------------------------------------------------------------------------- global variabbles --->
+ANIMATION_LENGTH_SEC = 10
 
 class OneBody:
     def __init__(self, name, mass, position, velocity, color):
@@ -19,10 +21,23 @@ class OneBody:
         self.velocity = sci.array(velocity, dtype="float64")
         self.color = color
 
+    def __str__(self):
+        retval = '\t{0:<19}:'.format(self.name)
+        for i, d in enumerate(['x', 'y', 'z']):
+            retval += '\t{0:<2} = {1: 8.3f}'.format(d, self.position[i])
+        retval += '\n\t' + 20 * ' '
+        for i, d in enumerate(['vx', 'vy', 'vz']):
+            retval += '\t{0:<2} = {1: 8.3f}'.format(d, self.velocity[i])
+        retval += '\n\t' + 20 * ' '
+        retval += '\t{0:<2} = {1: 8.3f}'.format('m', self.mass)
+        
+        return retval
+
 
 class MultiBodyProblem:
 
     def __init__(self, periods=8, points=500):
+        print('[\033[01;32m+\033[0m] Initialising MultiBody Problem solver.\n    periods: {0}\tintegration points: {1}'.format(periods, points))
         self.periods = periods
         self.points = points
 
@@ -48,6 +63,7 @@ class MultiBodyProblem:
         if name is None:
             name = 'Star {0}'.format(len(self.bodies) + 1)
         self.bodies.append(OneBody(name, mass, position, velocity, color))
+        print('[\033[01;32m+\033[0m] Added Celestial Body:\n{0}'.format(str(self.bodies[-1])))
         self.init_COM()
 
     def init_COM(self):
@@ -99,6 +115,7 @@ class MultiBodyProblem:
         self.time_span = sci.linspace(0, self.periods, self.points)
 
     def solve(self, relative_to_com=False):
+        print('[\033[01;32m+\033[0m] Running solver.')
         multi_body_solution = sci.integrate.odeint(self.MultiBodyEquations,
                                                    self.init_params,
                                                    self.time_span)
@@ -127,6 +144,7 @@ class MultiBodyProblem:
                 for j in range(3):
                     limits[j] = [min(limits[j][0], sol[j].min()), max(limits[j][1], sol[j].max())]
 
+        print('[\033[01;32m+\033[0m] Output data relative to Center of Mass: {0}.'.format(str(relative_to_com)))
         return r_sol, limits
 
 
@@ -143,33 +161,45 @@ def update_lines(num, dataLines, lines, dots):
     return lines, dots
 
 
-# Create figure
-fig = plt.figure(figsize=(12, 12))
-ax = p3.Axes3D(fig)
+if __name__ == '__main__':
+    # Create figure
+    print('[\033[01;32m+\033[0m] Started script to plot Multi-Body Problem using ODE.')
+    fig = plt.figure(figsize=(9, 9))
+    ax = p3.Axes3D(fig)
+    
+    # initialize class
+    mbp = MultiBodyProblem(20, 1500)
+    
+    # set up the celestial bodies
+    mbp.add_body(1.1, [-0.5, 0.0, 0.0], [0.01, 0.01, 0.0], 'Alpha Centauri A', "tab:blue")
+    mbp.add_body(0.907, [0.5 , 0.0, 0.0], [-0.05, 0.0, -0.1], 'Alpha Centauri B', "tab:red")
+    mbp.add_body(0.985, [0.0, 1.0, 0.0], [0.0, -0.005, 0.0], 'Alpha Centauri C', "tab:purple")
+    # mbp.add_body(1.0, [0.0, 0.0, 0.5], [0.0, 0.1, -0.1], 'Alpha Centauri D', "tab:green")
+    
+    # solve the problem
+    mbp.initialize()
+    mbp_sol, limits = mbp.solve(relative_to_com=True)
+    
+    # create the line objects for plots
+    # NOTE: Can't pass empy arrays into 3d plot
+    lines = [ax.plot(sol[0, 0:1], sol[1, 0:1], sol[2, 0:1], 
+             color=mbp.bodies[i].color)[0] for i, sol in enumerate(mbp_sol)]
+    dots = [ax.plot([sol[0, 1]], [sol[1, 1]], sol[2, 1],
+            color=mbp.bodies[i].color, linestyle="", marker="o")[0] for i, sol in enumerate(mbp_sol)]
+    
+    ax.set_xlim3d([limits[0][0], limits[0][1]])
+    ax.set_xlabel("x-coordinate", fontsize=14)
+    ax.set_ylim3d([limits[1][0], limits[1][1]])
+    ax.set_ylabel("y-coordinate", fontsize=14)
+    ax.set_zlim3d([limits[2][0], limits[2][1]])
+    ax.set_zlabel("z-coordinate", fontsize=14)
+    ax.set_title("Visualization of orbits of stars in a two-body system\n", fontsize=14)
+    # ax.legend(loc="upper left", fontsize=14)
+    
+    frames = sci.linspace(0, mbp.points - 1, num=(int(ANIMATION_LENGTH_SEC * 1000 / 50) - 1), dtype="int")[2:]
+    ani = animation.FuncAnimation(fig, update_lines,
+                                  frames=frames,
+                                  fargs=(mbp_sol, lines, dots), repeat_delay=50, blit=False)
+ 
+    plt.show()
 
-# solve the problem
-mbp = MultiBodyProblem(20, 500)
-mbp.add_body(1.0, [1.0, 0.0, 0.0], [0.0, 0.1, 0.1], 'Alpha Centauri A', "tab:blue")
-mbp.add_body(1.0, [-0.5 , 0.8660254, 0.0], [-0.08660254, -0.05, 0.1], 'Alpha Centauri B', "tab:red")
-mbp.add_body(1.0, [-0.5, -0.8660254, 0.0], [0.08660254, -0.05, 0.1], 'Alpha Centauri C', "tab:green")
-# mbp.add_body(1.0, [0.0, 0.0, 0.5], [0.0, 0.1, -0.1], 'Alpha Centauri D', "tab:purple")
-mbp.initialize()
-mbp_sol, limits = mbp.solve(relative_to_com=False)
-
-# create the line objects
-# NOTE: Can't pass empy arrays into 3d plot
-lines = [ax.plot(sol[0, 0:1], sol[1, 0:1], sol[2, 0:1], color=mbp.bodies[i].color)[0] for i, sol in enumerate(mbp_sol)]
-dots = [ax.plot([sol[0, 1]], [sol[1, 1]], sol[2, 1], color=mbp.bodies[i].color, linestyle="", marker="o")[0] for i, sol in enumerate(mbp_sol)]
-
-ax.set_xlim3d([limits[0][0], limits[0][1]])
-ax.set_xlabel("x-coordinate", fontsize=14)
-ax.set_ylim3d([limits[1][0], limits[1][1]])
-ax.set_ylabel("y-coordinate", fontsize=14)
-ax.set_zlim3d([limits[2][0], limits[2][1]])
-ax.set_zlabel("z-coordinate", fontsize=14)
-ax.set_title("Visualization of orbits of stars in a two-body system\n", fontsize=14)
-# ax.legend(loc="upper left", fontsize=14)
-
-ani = animation.FuncAnimation(fig, update_lines, frames=sci.linspace(2, mbp.points - 1, mbp.points - 3, dtype="int"), fargs=(mbp_sol, lines, dots), interval=10, blit=False)
-
-plt.show()
