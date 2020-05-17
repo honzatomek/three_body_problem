@@ -1,7 +1,14 @@
 #!/usr/bin/python3
 
+# <---------------------------------------------------------------------------- general imports --->
+import os
+import sys
+import datetime
+import configparser # Import configparser to read and save configurations
+# <---------------------------------------------------------------------------- numeric imports --->
+import math
 # Import scipy
-import scipy as sci
+import scipy as sci 
 import scipy.integrate
 # Import matplotlib and associated modules for 3D and animations
 import matplotlib.pyplot as plt
@@ -10,9 +17,14 @@ import mpl_toolkits.mplot3d.axes3d as p3
 # from matplotlib import animation
 import matplotlib.animation as animation
 
-# <-------------------------------------------------------------------------- global variabbles --->
-ANIMATION_LENGTH_SEC = 10
 
+# <--------------------------------------------------------------------------- global variables --->
+ANIMATION_LENGTH_SEC = 10
+# CONFIG_INI = os.path.splitext(__file__)[0] + '.ini'
+CONFIG_INI = os.path.join(os.path.dirname(__file__), 'save')
+
+
+# <------------------------------------------------------------------------------------ classes --->
 class OneBody:
     def __init__(self, name, mass, position, velocity, color):
         self.name = name
@@ -35,38 +47,39 @@ class OneBody:
 
 
 class MultiBodyProblem:
-
     def __init__(self, periods=8, points=500):
-        print('[\033[01;32m+\033[0m] Initialising MultiBody Problem solver.\n    periods: {0}\tintegration points: {1}'.format(periods, points))
+        print('[\033[01;32m+\033[0m] initialising multibody problem solver.\n    periods: {0},\tintegration points: {1}'.format(periods, points))
         self.periods = periods
         self.points = points
 
-        # Define universal gravitation constant
-        self.G = 5.67408e-11  # N-m2/kg2
-        # Reference quantities
+        # define universal gravitation constant
+        self.g = 5.67408e-11  # n-m2/kg2
+        # reference quantities
         self.m_nd = 0.989e+30  # kg #mass of the sun
-        self.r_nd = 4.326e+12  # m #distance between stars in Alpha Centauri
+        self.r_nd = 4.326e+12  # m #distance between stars in alpha centauri
         self.v_nd = 29999  # m/s #relative velocity of earth around the sun
-        self.t_nd = 78.91 * 365 * 24 * 3600 * 0.51  # s #orbital period of Alpha Centauri
-        # Net constants
-        self.K0= self.G * self.t_nd * self.m_nd / (self.r_nd ** 2 * self.v_nd)
-        self.K1 = self.v_nd * self.t_nd / self.r_nd
+        self.t_nd = 78.91 * 365 * 24 * 3600 * 0.51  # s #orbital period of alpha centauri
+        # net constants
+        self.k0= self.g * self.t_nd * self.m_nd / (self.r_nd ** 2 * self.v_nd)
+        self.k1 = self.v_nd * self.t_nd / self.r_nd
 
         self.bodies = []
 
-        self.COM = None
+        self.com = None
 
         self.init_params = None
         self.time_span = None
 
     def add_body(self, mass, position, velocity, name=None, color=None):
         if name is None:
-            name = 'Star {0}'.format(len(self.bodies) + 1)
+            name = 'star {0}'.format(len(self.bodies) + 1)
+        if color is None:
+            color = (random(), random(), random())
         self.bodies.append(OneBody(name, mass, position, velocity, color))
-        print('[\033[01;32m+\033[0m] Added Celestial Body:\n{0}'.format(str(self.bodies[-1])))
-        self.init_COM()
+        print('[\033[01;32m+\033[0m] added celestial body:\n{0}'.format(str(self.bodies[-1])))
+        self.init_com()
 
-    def init_COM(self):
+    def init_com(self):
         r_numerator = 0
         v_numerator = 0
         denominator = 0
@@ -75,10 +88,10 @@ class MultiBodyProblem:
             v_numerator += body.mass * body.velocity
             denominator += body.mass
 
-        self.COM = OneBody('COM', denominator, r_numerator / denominator, v_numerator / denominator, "tab:yellow")
+        self.com = OneBody('com', denominator, r_numerator / denominator, v_numerator / denominator, "tab:yellow")
 
-    #A function defining the equations of motion
-    def MultiBodyEquations(self, w, t):  # , G):
+    #a function defining the equations of motion
+    def multibodyequations(self, w, t):  # , g):
         r = []
         v = []
         num = len(self.bodies)
@@ -90,10 +103,10 @@ class MultiBodyProblem:
         dr_dt = []
         for i in range(num):
             dv_dt.append(0)
-            dr_dt.append(self.K1 * v[i])
+            dr_dt.append(self.k1 * v[i])
             for j in range(num):
                 if i != j:
-                    dv_dt[i] += self.K0 * self.bodies[j].mass * (r[j] - r[i]) / (sci.linalg.norm(r[j] - r[i]) ** 3)
+                    dv_dt[i] += self.k0 * self.bodies[j].mass * (r[j] - r[i]) / (sci.linalg.norm(r[j] - r[i]) ** 3)
 
         r_derivs = sci.concatenate((dr_dt[0], dr_dt[1]))
         v_derivs = sci.concatenate((dv_dt[0], dv_dt[1]))
@@ -115,8 +128,8 @@ class MultiBodyProblem:
         self.time_span = sci.linspace(0, self.periods, self.points)
 
     def solve(self, relative_to_com=False):
-        print('[\033[01;32m+\033[0m] Running solver.')
-        multi_body_solution = sci.integrate.odeint(self.MultiBodyEquations,
+        print('[\033[01;32m+\033[0m] running solver.')
+        multi_body_solution = sci.integrate.odeint(self.multibodyequations,
                                                    self.init_params,
                                                    self.time_span)
         r_sol = []
@@ -144,10 +157,47 @@ class MultiBodyProblem:
                 for j in range(3):
                     limits[j] = [min(limits[j][0], sol[j].min()), max(limits[j][1], sol[j].max())]
 
-        print('[\033[01;32m+\033[0m] Output data relative to Center of Mass: {0}.'.format(str(relative_to_com)))
+        print('[\033[01;32m+\033[0m] output data relative to center of mass: {0}.'.format(str(relative_to_com)))
         return r_sol, limits
 
+    def save(self, filepath):
+        defname = '{0}'.format(timestamp('fullname'))
+        session = input('[\033[01;34m?\033[0m] session name [{0}]: '.format(defname))
+        if session == '':
+            session = defname
+        
+        filename = os.path.join(filepath, session.replace(' ', '_').replace(':', '') + '.ini')
+        print('[\033[01;32m+\033[0m] saving session to: {0}'.format(filename))
 
+        config = configparser.ConfigParser(interpolation=None)
+        config['DEFAULT']['name'] = session
+        config['DEFAULT']['date'] = timestamp('datename')
+        config['DEFAULT']['time'] = timestamp('time')
+        config['DEFAULT']['bodies'] = str(len(self.bodies))
+        config['DEFAULT']['periods to solve'] = str(self.periods)
+        config['DEFAULT']['integration points'] = str(self.points)
+        
+        for i, b in enumerate(self.bodies):
+            config.add_section(str(i))
+            config[str(i)]['name'] = b.name
+            config[str(i)]['mass'] = '{0:e}'.format(b.mass)
+            for j, x in enumerate(['x', 'y', 'z']):
+                config[str(i)][x] = '{0:e}'.format(b.position[j]) 
+            for j, x in enumerate(['vx', 'vy', 'vz']):
+                config[str(i)][x] = '{0:e}'.format(b.velocity[j])
+            config[str(i)]['color'] = str(b.color)
+
+        # print(session)
+        # config.read_dict(session)
+        
+        if not os.path.isdir(os.path.dirname(filename)):
+            os.mkdir(os.path.dirname(filename))
+        with open(filename, 'w') as configfile:
+            config.write(configfile)
+        print('[\033[01;32m+\033[0m] session saved.')
+
+
+# <----------------------------------------------------------------------------- help functions --->
 def update_lines(num, dataLines, lines, dots):
     for line, data in zip(lines, dataLines):
         line.set_data(data[0:2, :num])
@@ -161,9 +211,45 @@ def update_lines(num, dataLines, lines, dots):
     return lines, dots
 
 
-if __name__ == '__main__':
+def query_yes_no(question: str='Continue?'):
+    prompt = '[\033[01;34m?\033[0m] ' + question + ' [Y/n]: '
+    answer = input(prompt)
+    if answer.lower() in ['y', 'yes']:
+        return True
+    elif answer.lower() in ['n', 'no']:
+        return False
+    else:
+        return True
+
+
+def timestamp(out='fullname'):
+    """
+    Returns timestamp, possible outputs: fullname [full, date, datename ,time]
+    fullname: 2020-Feb-01 07:28:15
+    full:     20200201_072815
+    datename: 2020-Feb-01
+    date:     2020-02-01
+    time:     07:28:15
+    """
+    if out == 'fullname':
+        return '{0:%Y-%b-%d %H:%M:%S}'.format(datetime.datetime.now())
+    elif out == 'full':
+        return '{0:%Y-%m-%d %H:%M:%S}'.format(datetime.datetime.now())
+    elif out == 'datename':
+        return '{0:%Y-%b-%d}'.format(datetime.datetime.now())
+    elif out == 'date':
+        return '{0:%Y-%m-%d}'.format(datetime.datetime.now())
+    elif out == 'time':
+        return '{0:%H:%M:%S}'.format(datetime.datetime.now())
+    else:
+        return '{0:%Y-%b-%d %H:%M:%S}'.format(datetime.datetime.now())
+
+
+# <------------------------------------------------------------------------------ main function --->
+def multi_body_problem():
+    # if __name__ == '__main__':
     # Create figure
-    print('[\033[01;32m+\033[0m] Started script to plot Multi-Body Problem using ODE.')
+    print('[\033[01;32m+\033[0m] started script to plot Multi-Body Problem using ODE.')
     fig = plt.figure(figsize=(9, 9))
     ax = p3.Axes3D(fig)
     
@@ -202,4 +288,11 @@ if __name__ == '__main__':
                                   fargs=(mbp_sol, lines, dots), repeat_delay=50, blit=False)
  
     plt.show()
+   
+    if query_yes_no('save the configuration?'):
+        mbp.save(CONFIG_INI)
 
+
+# <---------------------------------------------------------------------------- main entrypoint --->
+if __name__ == '__main__':
+    multi_body_problem()
