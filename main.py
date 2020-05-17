@@ -16,7 +16,7 @@ def multi_body_problem():
     fprint('[+] started script to plot Multi-Body Problem using ODE')
     
     # initialize class
-    mbp = MultiBodyProblem(20, 1500)
+    mbp = MultiBodyProblem(20, 2000)
     
     # set up the celestial bodies
     s = query_choice('Select session input', ['Script', 'Load', 'Manual', 'Exit'])
@@ -38,9 +38,9 @@ def multi_body_problem():
             #     fprint('[-] Wrong input, check the values and try agian\n    {0}'.format(s))
 
     elif s == 'script':
-        mbp.add_body(1.100, [-0.5, 0.0, 0.0], [0.01, 0.01, 0.0], 'Alpha Centauri A', "tab:blue")
-        mbp.add_body(0.907, [0.5 , 0.0, 0.5], [-0.05, 0.0, -0.01], 'Alpha Centauri B', "tab:red")
-        mbp.add_body(0.585, [0.5, 1.0, 0.0], [0.05, -0.05, 0.0], 'Alpha Centauri C', "tab:purple")
+        mbp.add_body(1.1, [-0.5, 0.0, 0.0], [0.01, 0.01, 0.0], 'Alpha Centauri A', "tab:blue")
+        mbp.add_body(0.907, [0.5 , 0.0, 0.0], [-0.05, 0.0, -0.1], 'Alpha Centauri B', "tab:red")
+        mbp.add_body(0.585, [0.5, 1.0, 0.0], [0.5, -0.05, 0.0], 'Alpha Centauri C', "tab:purple")
         # mbp.add_body(0.985, [0.0, 1.0, 0.0], [0.0, -0.005, 0.0], 'Alpha Centauri C', "tab:purple")
     else:
         sys.exit(fprint('[-] script exiting...', returnstr=True))

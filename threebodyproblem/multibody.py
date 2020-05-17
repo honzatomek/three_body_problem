@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import mpl_toolkits.mplot3d.axes3d as p3
 import matplotlib.animation as animation
+from matplotlib.widgets import TextBox, Button
 # <--------------------------------------------------------------------------------- my imports --->
 from .other import query_yes_no, timestamp, fprint
 
@@ -72,7 +73,13 @@ class MultiBodyProblem:
         self.ani = None
         self.fig = None
         self.ax = None
-        self.ax_p = [0.05, 0.05, 0.9, 0.9]  # [left, bottom, width, height]
+        self.ax_p = [0.05, 0.05, 0.65, 0.9]  # [left, bottom, width, height]
+        self.ax_t = list()   # texts
+        self.ax_wt = dict()  # axes for widgets - textboxes
+        self.ax_wb = list()  # axes for widgets - buttons
+        self.wt = dict()     # widgets - textboxes
+        self.wb = list()     # widgets - buttons
+        self.ax_c_p = [0.70, 0.05, 0.20, 0.9]  # [left, bottom, width, height]
 
     def add_body(self, mass, position, velocity, name=None, color=None):
         if name is None:
@@ -250,9 +257,38 @@ class MultiBodyProblem:
         fprint('[+] plotting solution')
 
         # Create figure
-        self.fig = plt.figure(figsize=(9, 9))
-        self.ax = p3.Axes3D(self.fig)
-        # self.ax = self.fig.add_axes(self.ax_p, projection='3d')
+        self.fig = plt.figure(figsize=(14,  9))  # (width, height)
+        # ax = p3.Axes3D(fig)
+        self.ax = self.fig.add_axes(self.ax_p, projection='3d')
+        ncol = 3                                  # x, y, z
+        nrow = 4                                  # name, mass, position, velocity
+        p = self.ax_c_p                           # [left, bottom, width, height]
+        
+        w = p[2] / ncol                           # width
+        h = p[3] / (len(self.bodies) * nrow + 1)  # height
+        
+        w_pad = 0.1 * w                           # padding of one cell (horizontal)
+        h_pad = 0.1 * h                           # padding of one cell (vertical)
+        
+        tb_w = w - 2* w_pad                       # TextBox width
+        tb_h = h - 2 * h_pad                      # TextBox height
+
+        for i, b in enumerate(self.bodies):
+            self.fig.text(p[0], p[1] + p[3] - h * (nrow * i + 1) + h_pad, b.name)
+            
+            self.ax_wt[i] = dict()
+            self.wt[i] = dict()
+            self.ax_wt[i]['mass'] = plt.axes([p[0] + w_pad, p[1] + p[3] - h * (nrow * i + 2) + h_pad, tb_w, tb_h])
+            self.wt[i]['mass'] = TextBox(self.ax_wt[i]['mass'], 'm:', '{0:.4f}'.format(b.mass))
+            for j, x in enumerate(['x', 'y', 'z']):
+                self.ax_wt[i][x] = plt.axes([p[0] + j * w + w_pad, p[1] + p[3] - h * (nrow * i + 3) + h_pad, tb_w, tb_h])
+                self.wt[i][x] = TextBox(self.ax_wt[i][x], x + ':', '{0:.4f}'.format(b.position[j]))
+
+            for j, x in enumerate(['vx', 'vy', 'vz']):
+                self.ax_wt[i][x] = plt.axes([p[0] + j * w + w_pad, p[1] + p[3] - h * (nrow * i + 4) + h_pad, tb_w, tb_h])
+                self.wt[i][x] = TextBox(self.ax_wt[i][x], x + ':', '{0:.4f}'.format(b.position[j]))
+
+
 
         # create the line objects for plots
         # NOTE: Can't pass empy arrays into 3d plot
