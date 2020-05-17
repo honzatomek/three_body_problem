@@ -22,7 +22,7 @@ import matplotlib.animation as animation
 ANIMATION_LENGTH_SEC = 10
 # CONFIG_INI = os.path.splitext(__file__)[0] + '.ini'
 CONFIG_INI = os.path.join(os.path.dirname(__file__), 'save')
-
+print(__file__)
 
 # <------------------------------------------------------------------------------------ classes --->
 class OneBody:
@@ -48,7 +48,7 @@ class OneBody:
 
 class MultiBodyProblem:
     def __init__(self, periods=8, points=500):
-        print('[\033[01;32m+\033[0m] initialising multibody problem solver.\n    periods: {0},\tintegration points: {1}'.format(periods, points))
+        print('[\033[01;32m+\033[0m] initialising multibody problem solver\n    periods: {0},integration points: {1}'.format(periods, points))
         self.periods = periods
         self.points = points
 
@@ -128,7 +128,7 @@ class MultiBodyProblem:
         self.time_span = sci.linspace(0, self.periods, self.points)
 
     def solve(self, relative_to_com=False):
-        print('[\033[01;32m+\033[0m] running solver.')
+        print('[\033[01;32m+\033[0m] running solver')
         multi_body_solution = sci.integrate.odeint(self.multibodyequations,
                                                    self.init_params,
                                                    self.time_span)
@@ -157,20 +157,65 @@ class MultiBodyProblem:
                 for j in range(3):
                     limits[j] = [min(limits[j][0], sol[j].min()), max(limits[j][1], sol[j].max())]
 
-        print('[\033[01;32m+\033[0m] output data relative to center of mass: {0}.'.format(str(relative_to_com)))
-        return r_sol, limits
+        print('[\033[01;32m+\033[0m] output data relative to COG of system: {0}'.format(str(relative_to_com)))
+        self.solution = r_sol
+        self.limits = limits
+        # return r_sol, limits
+
+    def load(self, filepath):
+        print('[\033[01;32m+\033[0m] loading saved sessions')
+        if os.path.isfile(filepath) and filepath.endswith('.ini'):
+            files = [filepath]
+            filepath = os.path.dirname(filepath)
+        elif os.path.isdir(filepath):
+            files = [f for f in os.listdir(filepath) if f.endswith('.ini')]
+        else:
+            print('[\033[01;31m-\033[0m] missing directory with saved files')
+            sys.exit(1)
+
+        for i, f in enumerate(files):   
+            c = configparser.ConfigParser()
+            c.read_file(open(os.path.join(filepath, f)))
+            print('\t{0} - {1} ({2}), {3} bodies'.format(i, f, c['DEFAULT']['description'], c['DEFAULT']['bodies']))
+            for j in range(int(c['DEFAULT']['bodies'])):
+                print('\t\t{0:<20} m = {1: 6}\tx = [{2: 6}, {3: 6}, {4: 6}]\tv = [{5: 6}, {6: 6}, {7: 6}]\tcolor = {8:<20}'.format(c[str(j)]['name'],
+                                                                                                                                   float(c[str(j)]['mass']),
+                                                                                                                                   float(c[str(j)]['x']),
+                                                                                                                                   float(c[str(j)]['y']),
+                                                                                                                                   float(c[str(j)]['z']),
+                                                                                                                                   float(c[str(j)]['vx']),
+                                                                                                                                   float(c[str(j)]['vy']),
+                                                                                                                                   float(c[str(j)]['vz']),
+                                                                                                                                   c[str(j)]['color']))
+        select = input('[\033[01;34m?\033[0m] Select session number to load [0]: ')
+        if select == '':
+            select = '0'
+        if select in [str(i) for i in range(len(files))]:
+            select = int(select)
+        else:
+            sys.exit('[\033[01;31m-\033[0m] no session selected, exiting...')
+        
+        c = configparser.ConfigParser()
+        c.read_file(open(os.path.join(filepath, files[select])))
+        self.periods = int(c['DEFAULT']['periods to solve'])
+        self.points = int(c['DEFAULT']['integration points'])
+        for j in range(int(c['DEFAULT']['bodies'])):
+            self.add_body(float(c[str(j)]['mass']), [float(c[str(j)]['x']), float(c[str(j)]['y']), float(c[str(j)]['z'])], [float(c[str(j)]['vx']), float(c[str(j)]['vy']), float(c[str(j)]['vz'])], c[str(j)]['name'], c[str(j)]['color'])
 
     def save(self, filepath):
         defname = '{0}'.format(timestamp('fullname'))
         session = input('[\033[01;34m?\033[0m] session name [{0}]: '.format(defname))
         if session == '':
             session = defname
+
+        description = input('[\033[01;34m?\033[0m] description: ')
         
         filename = os.path.join(filepath, session.replace(' ', '_').replace(':', '') + '.ini')
         print('[\033[01;32m+\033[0m] saving session to: {0}'.format(filename))
 
         config = configparser.ConfigParser(interpolation=None)
         config['DEFAULT']['name'] = session
+        config['DEFAULT']['description'] = description
         config['DEFAULT']['date'] = timestamp('datename')
         config['DEFAULT']['time'] = timestamp('time')
         config['DEFAULT']['bodies'] = str(len(self.bodies))
@@ -194,23 +239,52 @@ class MultiBodyProblem:
             os.mkdir(os.path.dirname(filename))
         with open(filename, 'w') as configfile:
             config.write(configfile)
-        print('[\033[01;32m+\033[0m] session saved.')
+        print('[\033[01;32m+\033[0m] session saved')
+    
+    def plot(self):
+        print('[\033[01;32m+\033[0m] plotting solution')
+
+        # Create figure
+        fig = plt.figure(figsize=(9, 9))
+        ax = p3.Axes3D(fig)
+
+        # create the line objects for plots
+        # NOTE: Can't pass empy arrays into 3d plot
+        lines = [ax.plot(sol[0, 0:1], sol[1, 0:1], sol[2, 0:1], 
+                 color=self.bodies[i].color)[0] for i, sol in enumerate(self.solution)]
+        dots = [ax.plot([sol[0, 1]], [sol[1, 1]], sol[2, 1],
+                color=self.bodies[i].color, linestyle="", marker="o")[0] for i, sol in enumerate(self.solution)]
+        
+        def update_lines(num, dataLines, lines, dots):
+            for line, data in zip(lines, dataLines):
+                line.set_data(data[0:2, :num])
+                line.set_3d_properties(data[2, :num])
+            
+            for dot, data in zip(dots, dataLines):
+                # dot._offsets3d = [float(data[0, num]), float(data[1, num]), float(data[2, num])]
+                dot.set_data(data[0:2, num])
+                dot.set_3d_properties(data[2, num])
+
+            return lines, dots
+
+        ax.set_xlim3d([self.limits[0][0], self.limits[0][1]])
+        ax.set_xlabel("x-coordinate", fontsize=14)
+        ax.set_ylim3d([self.limits[1][0], self.limits[1][1]])
+        ax.set_ylabel("y-coordinate", fontsize=14)
+        ax.set_zlim3d([self.limits[2][0], self.limits[2][1]])
+        ax.set_zlabel("z-coordinate", fontsize=14)
+        ax.set_title("Visualization of orbits of stars in a two-body system\n", fontsize=14)
+        # ax.legend(loc="upper left", fontsize=14)
+        
+        frames = sci.linspace(0, self.points - 1, num=(int(ANIMATION_LENGTH_SEC * 1000 / 50) - 1), dtype="int")[2:]
+        ani = animation.FuncAnimation(fig, update_lines,
+                                      frames=frames,
+                                      fargs=(self.solution, lines, dots), repeat_delay=25, blit=False)
+ 
+        plt.show()
 
 
 # <----------------------------------------------------------------------------- help functions --->
-def update_lines(num, dataLines, lines, dots):
-    for line, data in zip(lines, dataLines):
-        line.set_data(data[0:2, :num])
-        line.set_3d_properties(data[2, :num])
-    
-    for dot, data in zip(dots, dataLines):
-        # dot._offsets3d = [float(data[0, num]), float(data[1, num]), float(data[2, num])]
-        dot.set_data(data[0:2, num])
-        dot.set_3d_properties(data[2, num])
-
-    return lines, dots
-
-
 def query_yes_no(question: str='Continue?'):
     prompt = '[\033[01;34m?\033[0m] ' + question + ' [Y/n]: '
     answer = input(prompt)
@@ -247,47 +321,25 @@ def timestamp(out='fullname'):
 
 # <------------------------------------------------------------------------------ main function --->
 def multi_body_problem():
-    # if __name__ == '__main__':
-    # Create figure
-    print('[\033[01;32m+\033[0m] started script to plot Multi-Body Problem using ODE.')
-    fig = plt.figure(figsize=(9, 9))
-    ax = p3.Axes3D(fig)
+    print('[\033[01;32m+\033[0m] started script to plot Multi-Body Problem using ODE')
     
     # initialize class
     mbp = MultiBodyProblem(20, 1500)
     
     # set up the celestial bodies
-    mbp.add_body(1.1, [-0.5, 0.0, 0.0], [0.01, 0.01, 0.0], 'Alpha Centauri A', "tab:blue")
-    mbp.add_body(0.907, [0.5 , 0.0, 0.0], [-0.05, 0.0, -0.1], 'Alpha Centauri B', "tab:red")
-    mbp.add_body(0.985, [0.0, 1.0, 0.0], [0.0, -0.005, 0.0], 'Alpha Centauri C', "tab:purple")
-    # mbp.add_body(1.0, [0.0, 0.0, 0.5], [0.0, 0.1, -0.1], 'Alpha Centauri D', "tab:green")
+    if query_yes_no('do you wand to load saved session?'):
+        mbp.load(CONFIG_INI)
+    else:
+        mbp.add_body(1.1, [-0.5, 0.0, 0.0], [0.01, 0.01, 0.0], 'Alpha Centauri A', "tab:blue")
+        mbp.add_body(0.907, [0.5 , 0.0, 0.0], [-0.05, 0.0, -0.1], 'Alpha Centauri B', "tab:red")
+        mbp.add_body(0.585, [0.5, 1.0, 0.0], [0.5, -0.05, 0.0], 'Alpha Centauri C', "tab:purple")
+        # mbp.add_body(0.985, [0.0, 1.0, 0.0], [0.0, -0.005, 0.0], 'Alpha Centauri C', "tab:purple")
     
     # solve the problem
     mbp.initialize()
-    mbp_sol, limits = mbp.solve(relative_to_com=True)
-    
-    # create the line objects for plots
-    # NOTE: Can't pass empy arrays into 3d plot
-    lines = [ax.plot(sol[0, 0:1], sol[1, 0:1], sol[2, 0:1], 
-             color=mbp.bodies[i].color)[0] for i, sol in enumerate(mbp_sol)]
-    dots = [ax.plot([sol[0, 1]], [sol[1, 1]], sol[2, 1],
-            color=mbp.bodies[i].color, linestyle="", marker="o")[0] for i, sol in enumerate(mbp_sol)]
-    
-    ax.set_xlim3d([limits[0][0], limits[0][1]])
-    ax.set_xlabel("x-coordinate", fontsize=14)
-    ax.set_ylim3d([limits[1][0], limits[1][1]])
-    ax.set_ylabel("y-coordinate", fontsize=14)
-    ax.set_zlim3d([limits[2][0], limits[2][1]])
-    ax.set_zlabel("z-coordinate", fontsize=14)
-    ax.set_title("Visualization of orbits of stars in a two-body system\n", fontsize=14)
-    # ax.legend(loc="upper left", fontsize=14)
-    
-    frames = sci.linspace(0, mbp.points - 1, num=(int(ANIMATION_LENGTH_SEC * 1000 / 50) - 1), dtype="int")[2:]
-    ani = animation.FuncAnimation(fig, update_lines,
-                                  frames=frames,
-                                  fargs=(mbp_sol, lines, dots), repeat_delay=50, blit=False)
- 
-    plt.show()
+    # mbp_sol, limits = mbp.solve(relative_to_com=True)
+    mbp.solve(relative_to_com=True)
+    mbp.plot()
    
     if query_yes_no('save the configuration?'):
         mbp.save(CONFIG_INI)
