@@ -144,17 +144,17 @@ def update_lines(num, dataLines, lines, dots):
 
 
 # Create figure
-fig = plt.figure(figsize=(15, 15))
+fig = plt.figure(figsize=(12, 12))
 ax = p3.Axes3D(fig)
 
 # solve the problem
-mbp = MultiBodyProblem(20, 1000)
-mbp.add_body(1.0, [1.0, 0.0, 0.0], [0.0, 0.1, 0.0], 'Alpha Centauri A', "tab:blue")
-mbp.add_body(1.0, [-0.5 , 0.8660254, 0.0], [-0.08660254, -0.05, 0.01], 'Alpha Centauri B', "tab:red")
-mbp.add_body(1.0, [-0.5, -0.8660254, 0.0], [0.08660254, -0.05, -0.01], 'Alpha Centauri C', "tab:green")
+mbp = MultiBodyProblem(20, 500)
+mbp.add_body(1.0, [1.0, 0.0, 0.0], [0.0, 0.1, 0.1], 'Alpha Centauri A', "tab:blue")
+mbp.add_body(1.0, [-0.5 , 0.8660254, 0.0], [-0.08660254, -0.05, 0.1], 'Alpha Centauri B', "tab:red")
+mbp.add_body(1.0, [-0.5, -0.8660254, 0.0], [0.08660254, -0.05, 0.1], 'Alpha Centauri C', "tab:green")
 # mbp.add_body(1.0, [0.0, 0.0, 0.5], [0.0, 0.1, -0.1], 'Alpha Centauri D', "tab:purple")
 mbp.initialize()
-mbp_sol, limits = mbp.solve(relative_to_com=True)
+mbp_sol, limits = mbp.solve(relative_to_com=False)
 
 # create the line objects
 # NOTE: Can't pass empy arrays into 3d plot
@@ -170,6 +170,6 @@ ax.set_zlabel("z-coordinate", fontsize=14)
 ax.set_title("Visualization of orbits of stars in a two-body system\n", fontsize=14)
 # ax.legend(loc="upper left", fontsize=14)
 
-ani = animation.FuncAnimation(fig, update_lines, frames=sci.linspace(2, mbp.points - 1, mbp.points - 3, dtype="int"), fargs=(mbp_sol, lines, dots), interval=50, blit=False)
+ani = animation.FuncAnimation(fig, update_lines, frames=sci.linspace(2, mbp.points - 1, mbp.points - 3, dtype="int"), fargs=(mbp_sol, lines, dots), interval=10, blit=False)
 
 plt.show()
